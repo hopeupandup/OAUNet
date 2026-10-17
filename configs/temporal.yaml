@@ -1,0 +1,48 @@
+# Base-model training on the temporal split.
+# Run: python train.py --config configs/temporal.yaml --temporal
+
+run_mode: formal
+
+verify:
+  limit_train: 100
+  limit_test: 100
+  epochs: 1
+
+training:
+  epochs: 20
+  batch_size: 2
+  learning_rate: 0.0001
+  optimizer: adam
+  loss: mse_nll               
+  lambda_nll: 1.0
+  sigma_lr_mult: 3.0          
+  lr_scheduler: cosine
+  eta_min_ratio: 0.01
+  early_stop_patience: 4
+  grad_clip: 2.0
+  seed: 7
+
+model:
+  name: trajgru
+  input_channels: 1
+  hidden_channels: [32, 64, 64]
+  num_layers: 3
+  num_flows: [5, 5, 5]
+  output_frames: 10
+  heteroscedastic: true        
+
+data:
+  input_frames: 5
+  height: 101
+  width: 101
+  height_idx: 3
+  temporal_name: temporal_strong
+
+paths:
+  data_dir: data_temporal
+  checkpoints_dir: results/checkpoints
+  logs_dir: results/logs
+
+logging:
+  log_interval: 10
+  save_interval: 5

@@ -1,0 +1,109 @@
+# Temporal-drift protocol (dBZ). Run: python run_experiments.py --config configs/oaunet_temporal.yaml --temporal
+
+seed: 7
+device: auto
+run_mode: formal
+
+verify:
+  limit_train: 100
+  limit_test: 100
+  epochs: 1
+  n_tasks: 4
+  meta_epochs: 1
+  inner_steps: 1
+  support_size: 10
+  query_size: 8
+
+model:
+  input_channels: 1
+  hidden_channels: [32, 64, 64]
+  num_layers: 3
+  output_frames: 10
+  num_flows: [5, 5, 5]
+  heteroscedastic: true
+  use_checkpoint: true             
+
+checkpoint_path: results/checkpoints/model_final.pth
+mc_samples: 5
+
+enable_online_vi: true
+enable_active_learning: true
+enable_drift_detection: true
+enable_meta_learning: true
+
+online_vi:
+  prior_center: anchor
+  prior_sigma: 0.01
+  learning_rate: 0.0001
+  drift_lr_mult: 1.0
+  adapt_scope: decoder
+  beta_kl: 0.01
+  kl_scaling: per_param
+  update_mode: buffer
+  buffer_size: 8
+  mini_batch: 4
+  inner_steps: 5
+  buffer_lr: 0.0001
+  intensity_alpha: 0.0
+  heavy_threshold: 0.4215          # u space; equals 30 dBZ
+
+active_learning:
+  beta_U: 1.5
+  warmup_steps: 30
+  gate_mode: difficulty
+  uniform_rate: 0.094
+
+drift_detection:
+  delta: 0.01
+  min_window: 10
+  max_window: 500
+  error_scale: 0.1
+  # Bernstein bound plus a standard-error test for the jump; the Hoeffding default never fires here.
+  epsilon_mode: variance
+  sudden_mode: se
+  sudden_factor: 2.0
+
+recalibration:
+  enable: false
+  window_size: 200
+  min_window: 30
+  s_min: 0.1
+  s_max: 10.0
+  quantile: 0.5
+
+meta_learning:
+  inner_lr: 0.01
+  outer_lr: 0.001
+  inner_steps: 3
+  n_tasks: 20
+  support_size: 16
+  query_size: 12
+  meta_epochs: 20
+  adapt_steps: 3
+
+online_gd:
+  learning_rate: 0.001
+
+periodic_retrain:
+  interval: 100
+  epochs: 3
+  learning_rate: 0.0001
+
+data:
+  input_frames: 5
+  output_frames: 10
+  height: 101
+  width: 101
+  temporal_name: temporal_drift3000
+
+paths:
+  data_dir: data_temporal
+  checkpoints_dir: results/checkpoints
+  results_dir: results/metrics
+  figures_dir: results/figures
+  logs_dir: results/logs
+
+evaluation:
+  thresholds: [5, 15, 30]          # dBZ; dBZ = u * 95 - 10
+  use_dbz: true
+  max_value: 255.0
