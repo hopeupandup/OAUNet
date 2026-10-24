@@ -2,7 +2,7 @@
 
 Reference implementation for the manuscript
 
-> *Selective Online Adaptation for Radar-Echo Nowcasting under Constructed Drift:
+> *Selective Online Adaptation for Radar-Echo Nowcasting under Controlled Drift:
 > Budget and Boundary Conditions*
 
 This repository contains the **complete, self-contained code** needed to
@@ -15,8 +15,9 @@ pipeline. No data or trained weights are shipped — see [Data preparation](#4-d
 ## 1. What is here
 
 OAUNet is a **selective** online-adaptation wrapper around a TrajGRU
-radar-echo extrapolator. Four components can be switched on or off
-independently (see `components/`):
+radar-echo extrapolator. Four reported components can be switched on or off
+independently, and one experimental module is retained for completeness (see
+`components/`):
 
 | Component | File | Role |
 |---|---|---|
@@ -24,10 +25,36 @@ independently (see `components/`):
 | Uncertainty-gated active learning | `components/active_learning.py` | Decides **whether** to adapt on a given sample (budget control) |
 | ADWIN drift detection | `components/drift_detection.py` | Detects mean shifts in the bounded drift signal and classifies abrupt vs. gradual |
 | Online variance recalibration (OVR) | `components/variance_recalibration.py` | Gradient-free per-sample scale correction of the predictive σ |
-| Meta-learning (MAML) | `components/meta_learning.py` | Evaluated and reported as **not effective** in the paper; kept for completeness |
+| Meta-learning (MAML) | `components/meta_learning.py` | **Experimental option, off by default.** Not part of the reported method; kept for completeness. See [Experimental option](#experimental-option-meta-learning) |
 
 The main entry points are `train.py` (base model) and `run_experiments.py`
 (offline / online / periodic-retrain baselines plus the ablation suite).
+
+### Experimental option: meta-learning
+
+`components/meta_learning.py` is retained but **disabled in the default
+configuration**, and it is not part of the method reported in the paper. Two
+reasons are worth recording for anyone reading the code:
+
+- The reported method is the three used components: online VI, the gated
+  update rule, and drift detection.
+- With the module enabled, its drift-time branch fires on 4 of 3000 steps
+  (0.13 %) and its removal changes MAE by 0.03 dBZ, below the three-seed
+  spread of the main arms (0.05 dBZ).
+
+Setting `enable_meta_learning: true` in `configs/oaunet_temporal.yaml` restores
+two things: the module is instantiated and may act at detected abrupt drift,
+and `results/checkpoints/meta_trained.pt` is loaded as the shared starting
+point of the selective arms (it is generated once, on first use, by episodic
+pre-training of the base model). The default configuration therefore starts the
+selective arms from the plain base-model checkpoint; the 0.03 dBZ figure above
+is the combined effect of those two roles, so it also bounds the difference
+between the default and the runs reported in the paper.
+
+Because `create_experiment_config` no longer overrides this flag per
+experiment, the YAML value governs every arm except `oaunet_no_ml`,
+`oaunet_vi_only`, `offline_ovr` and `offline_sigma`, which force it off by
+design.
 
 ---
 
@@ -51,7 +78,7 @@ The main entry points are `train.py` (base model) and `run_experiments.py`
 │   ├── offline_baseline.py      # frozen model
 │   ├── online_gd.py             # per-sample online gradient descent
 │   └── periodic_retrain.py      # periodic retraining from a buffer
-├── components/                  # the four adaptive components (+ MAML)
+├── components/                  # the three adaptive components (+ an experimental MAML module)
 ├── oaunet/
 │   ├── framework.py             # Algorithm 1: the per-sample processing loop
 │   └── online_evaluator.py      # streaming evaluation, checkpointing, per-sample metrics
@@ -89,8 +116,8 @@ The paper's experiments were run on a **single consumer-grade NVIDIA RTX 4050
 laptop GPU with 6 GB of memory**; the batch / buffer / support-query sizes in
 `configs/` are set to fit that budget. A larger GPU will simply run faster —
 note that the configs in `configs/oaunet_temporal.yaml` keep
-`model.use_checkpoint: true`, which is required for the meta-learning forward
-passes to fit in 6 GB (it is mathematically equivalent, just recomputed).
+`model.use_checkpoint: true`, which is required to fit 6 GB (it is
+mathematically equivalent, just recomputed).
 
 The code is single-process; do **not** launch several runs concurrently on a
 6 GB card.
@@ -195,8 +222,9 @@ python run_experiments.py --config configs/oaunet_temporal.yaml --temporal --exp
 Running without `--experiment` opens an interactive menu with progress display
 and resume support. With `--experiment`, finished arms are skipped automatically
 (a `summary.json` that already exists is never overwritten unless `--force` is
-given). `--force` also deletes the meta-training cache, so it implies re-running
-meta-training — use it deliberately.
+given). `--force` also deletes the episodic pre-training cache, so with the
+optional MAML module enabled it implies re-running that pre-training — use it
+deliberately.
 
 ### Available experiment arms
 
@@ -207,12 +235,12 @@ meta-training — use it deliberately.
 | `offline_sigma` | Frozen μ + trained σ head, recalibration **off** — the matched control for `offline_ovr` |
 | `online_gd` | Per-sample online gradient descent (updates every sample) |
 | `periodic_retrain` | Periodic retraining from a recent buffer |
-| `oaunet` | Full OAUNet (online VI + gated AL + drift detection + MAML) |
+| `oaunet` | Full OAUNet (online VI + gated AL + drift detection) — the method reported in the paper |
 | `oaunet_no_al` | OAUNet without the active-learning gate |
 | `oaunet_no_dd` | OAUNet without drift detection |
-| `oaunet_no_ml` | OAUNet without meta-learning |
-| `oaunet_vi_only` | Online VI only — no gate, no drift detection, no meta-learning |
-| `oaunet_uniform` | Same update budget as `oaunet` but a uniform (non-difficulty) gate — separates selection bias from update count |
+| `oaunet_no_ml` | Same as `oaunet` with the optional MAML module forced off; identical to `oaunet` under the default config, retained so the comparison can be re-run with the module on |
+| `oaunet_vi_only` | Online VI only — no gate, no drift detection |
+| `oaunet_uniform` | Same components as `oaunet` but a uniform (non-difficulty) gate — separates the selection rule from the update count |
 | `baselines` | shorthand for the baseline arms |
 | `ablation` | shorthand for the ablation arms |
 | `all` | every arm above |
@@ -264,7 +292,7 @@ Figures land in `results/figures/temporal_drift3000/`, logs in `results/logs/`.
 | `--device cpu\|cuda` | both | force the device |
 | `--resume` | both | resume from the latest checkpoint |
 | `--experiment NAME` | `run_experiments.py` | run a specific arm / shorthand / `all` |
-| `--force` | `run_experiments.py` | ignore existing results (also clears the meta-training cache) |
+| `--force` | `run_experiments.py` | ignore existing results (also clears the episodic pre-training cache) |
 | `--gate_mode difficulty\|uniform` | `run_experiments.py` | override the active-learning gate |
 | `--temporal_name` | `run_experiments.py` | choose the drift setting without editing YAML |
 
@@ -288,7 +316,7 @@ If you use this code, please cite the paper:
 ```bibtex
 @article{oaunet,
   title   = {Selective Online Adaptation for Radar-Echo Nowcasting under
-             Constructed Drift: Budget and Boundary Conditions},
+             Controlled Drift: Budget and Boundary Conditions},
   author  = {Xiao, Chengguo and Guo, Jun},
   journal = {TBD},
   year    = {2026}

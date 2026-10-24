@@ -65,19 +65,16 @@ def create_experiment_config(base_config, experiment_name, checkpoint_path):
         config['enable_online_vi'] = True
         config['enable_active_learning'] = True
         config['enable_drift_detection'] = True
-        config['enable_meta_learning'] = True
 
     elif experiment_name == 'oaunet_no_al':
         config['enable_online_vi'] = True
         config['enable_active_learning'] = False
         config['enable_drift_detection'] = True
-        config['enable_meta_learning'] = True
 
     elif experiment_name == 'oaunet_no_dd':
         config['enable_online_vi'] = True
         config['enable_active_learning'] = True
         config['enable_drift_detection'] = False
-        config['enable_meta_learning'] = True
 
     elif experiment_name == 'oaunet_no_ml':
         config['enable_online_vi'] = True
@@ -96,7 +93,6 @@ def create_experiment_config(base_config, experiment_name, checkpoint_path):
         config['enable_online_vi'] = True
         config['enable_active_learning'] = True
         config['enable_drift_detection'] = True
-        config['enable_meta_learning'] = True
         al = dict(config.get('active_learning') or {})
         al['gate_mode'] = 'uniform'
         config['active_learning'] = al

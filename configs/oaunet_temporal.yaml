@@ -29,7 +29,10 @@ mc_samples: 5
 enable_online_vi: true
 enable_active_learning: true
 enable_drift_detection: true
-enable_meta_learning: true
+# Experimental option, off by default: the reported method is online VI + gated AL
+# + drift detection. Enabling it also loads meta_trained.pt as the shared starting
+# point of the selective arms; see README section "Experimental option".
+enable_meta_learning: false
 
 online_vi:
   prior_center: anchor
